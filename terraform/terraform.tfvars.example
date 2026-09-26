@@ -1,8 +1,0 @@
-location            = "eastasia"
-resource_group_name = "rg-sudoku-game"
-acr_name            = "acrsudokugame"
-aks_cluster_name    = "aks-sudoku-game"
-kubernetes_version  = "1.36"
-node_count          = "1"
-node_vm_size        = "Standard_D2s_v3"
-dns_prefix          = "sudoku-game"
