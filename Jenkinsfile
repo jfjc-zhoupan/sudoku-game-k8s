@@ -54,10 +54,7 @@ pipeline {
                                 script: "cd ${env.TF_DIR} && terraform output -raw acr_login_server"
                             ).trim()
 
-                            env.ACR_USERNAME = sh(
-                                returnStdout: true,
-                                script: "az acr credential show --name ${env.ACR_NAME} --query username -o tsv"
-                            ).trim()
+                            env.ACR_USERNAME = env.ACR_NAME
                         }
                     }
                 }
