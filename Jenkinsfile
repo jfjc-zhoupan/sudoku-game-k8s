@@ -3,69 +3,52 @@ pipeline {
     environment {
         APP_NAME = 'sudoku-game'
         APP_DIR = 'app'
-        TF_DIR = 'terraform-infra'
         VERSION_FILE = "${APP_DIR}/version.py"
 
-        ACR_NAME = 'acrsudokugame'
         ACR_SERVER = 'acrsudokugame.azurecr.io'
         DOCKER_IMAGE = "${ACR_SERVER}/${APP_NAME}"
-        BRANCH_NAME = 'test-branch'
 
-        K8S_NAMESPACE = 'sudoku-game'
         AKS_RESOURCE_GROUP = 'rg-sudoku-game'
         AKS_CLUSTER_NAME = 'aks-sudoku-game'
+        K8S_NAMESPACE = 'sudoku-game'
+        K8S_MANIFESTS_DIR = 'k8s/aks'
 
-        TF_VAR_location = 'eastasia'
+        ORIGINAL_VERSION = ''
+        NEW_VERSION = ''
+        APP_PUBLIC_IP = ''
     }
 
     stages {
         stage("Checkout"){
             steps{
-                cleanWs(
-                    patterns: [
-                        [pattern: '**/terraform.tfstate', type: 'EXCLUDE'],
-                        [pattern: '**/terraform.tfstate.backup', type: 'EXCLUDE'],
-                        [pattern: '**/.terraform/**', type: 'EXCLUDE']
-                    ]
-                )
+                cleanWs()
                 checkout scm
                 script {
+                    echo "Branch: ${env.BRANCH_NAME}"
+                    sh 'ls -la'
                     sh 'ls -la app/'
-                    sh 'cat app/version.py'
                     env.GIT_COMMIT_SHORT = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                    echo "Commit SHA: ${env.GIT_COMMIT_SHORT}"
                 }
             }
         }
-        stage("Read Original Version"){
+        stage("Bump Version"){
             steps{
                 script{
                     def versionContent = readFile("${env.VERSION_FILE}")
-
                     def versionLine = versionContent.readLines().find { line ->
                         line.trim().startsWith('__version__')
                     }
-
                     if (versionLine == null) {
                         error "Could not find __version__ in ${env.VERSION_FILE}"
                     }
-
                     def parts = versionLine.split('=')
                     def version = parts[1].trim().replace('"', '').replace("'", '')
                     env.ORIGINAL_VERSION = String.valueOf(version)
-                }
-            }
-        }
-        stage('Bump Version'){
-            steps{
-                script{
-                    def originalVersion = env.ORIGINAL_VERSION
-                    if (!originalVersion || originalVersion == 'null') {
-                        error "ORIGINAL_VERSION is null. Fix Stage 2 first."
-                    }
-                    def parts = originalVersion.split('\\.')
-                    def newPatch = (parts[2] as Integer) + 1
-                    def newVersion = "${parts[0]}.${parts[1]}.${newPatch}"
-                    env.NEW_VERSION = String.valueOf(newVersion)
+
+                    def versionParts = env.ORIGINAL_VERSION.split('\\.')
+                    def newPatch = (versionParts[2] as Integer) + 1
+                    env.NEW_VERSION = "${versionParts[0]}.${versionParts[1]}.${newPatch}"
 
                     sh """
                         sed -i 's/__version__ = .*/__version__ = "${newVersion}"/' ${env.VERSION_FILE}
@@ -74,27 +57,20 @@ pipeline {
                 }
             }
         }
-        stage("Build Docker Image"){
-            steps{
-                script{
-                    sh """
-                            cd ${env.APP_DIR}
-                            docker build -t ${env.DOCKER_IMAGE}:${env.NEW_VERSION} .
-                            docker tag ${env.DOCKER_IMAGE}:${env.NEW_VERSION} ${env.DOCKER_IMAGE}:latest
-                        """
-                }
-            }
-        }
-        stage("Push Docker Image"){
+        stage("Build and Push Image"){
             steps{
                 script{
                     withCredentials([usernamePassword(
-                        credentialsId: 'acr-credentials',
-                        usernameVariable: 'ACR_USER',
-                        passwordVariable: 'ACR_PASS'
-                    )]) {
+                                credentialsId: 'acr-credentials',
+                                usernameVariable: 'ACR_USER',
+                                passwordVariable: 'ACR_PASS'
+                            )]) {
                         sh """
                             echo "${ACR_PASS}" | docker login ${env.ACR_SERVER} -u "${ACR_USER}" --password-stdin
+                            cd ${env.APP_DIR}
+                            docker build -t ${env.DOCKER_IMAGE}:${env.NEW_VERSION} .
+                            docker tag ${env.DOCKER_IMAGE}:${env.NEW_VERSION} ${env.DOCKER_IMAGE}:latest
+
                             docker push ${env.DOCKER_IMAGE}:${env.NEW_VERSION}
                             docker push ${env.DOCKER_IMAGE}:latest
                         """
@@ -102,31 +78,7 @@ pipeline {
                 }
             }
         }
-        stage("Deploy Infrastructure"){
-            steps{
-                script{
-                    withCredentials([
-                            file(credentialsId: 'azure-terraform-pfx', variable: 'ARM_CLIENT_CERTIFICATE_PATH'),
-                            string(credentialsId: 'azure-pfx-password', variable: 'ARM_CLIENT_CERTIFICATE_PASSWORD'),
-                            string(credentialsId: 'azure-storage-key', variable: 'ARM_ACCESS_KEY')
-                        ]) {
-                        withEnv([
-                                "ARM_CLIENT_ID=fcb81694-c5c2-4d1d-b349-665f8fb040d0",
-                                "ARM_TENANT_ID=964f9745-bd07-4d1d-9a24-40f9bc141cc4",
-                                "ARM_SUBSCRIPTION_ID=4b4511ba-165a-4df2-be28-75937cfe1031"
-                            ]) {
-                            sh """
-                                cd ${env.TF_DIR}
-                                terraform init
-                                terraform plan
-                                terraform apply -auto-approve
-                            """
-                        }
-                    }
-                }
-            }
-        }
-        stage('Configure kubectl'){
+        stage('Deploy to AKS'){
             steps{
                 script{
                     withCredentials([
@@ -146,38 +98,32 @@ pipeline {
 
                                 kubectl get nodes
                             """
+
+                            sh """
+                                kubectl apply -f k8s/aks/
+                            """
+
+                            sh """
+                                echo "=== Updating deployment to ${env.DOCKER_IMAGE}:${env.NEW_VERSION} ==="
+                                kubectl set image deployment/${env.APP_NAME} \
+                                    ${env.APP_NAME}=${env.DOCKER_IMAGE}:${env.NEW_VERSION} \
+                                    -n ${env.K8S_NAMESPACE}
+
+                                echo "=== Waiting for rollout ==="
+                                kubectl rollout status deployment/${env.APP_NAME} \
+                                    -n ${env.K8S_NAMESPACE} \
+                                    --timeout=300s
+
+                                kubectl get pods -n ${env.K8S_NAMESPACE}
+                            """
+
+                            env.APP_PUBLIC_IP = sh(
+                                returnStdout: true,
+                                script: "kubectl get ingress -n ${env.K8S_NAMESPACE} -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}'"
+                            ).trim()
+                            echo "App Public IP: ${env.APP_PUBLIC_IP}"
                         }
                     }
-                }
-            }
-        }
-        stage("Deploy K8s Manifests"){
-            steps{
-                script{
-                    sh """
-                        kubectl apply -f k8s/aks/
-                    """
-                }
-            }
-        }
-        stage("Update App Image"){
-            steps{
-                script{
-                    def image = "${env.DOCKER_IMAGE}:${env.NEW_VERSION}"
-                    sh """
-                        echo "=== Updating deployment to image: ${image} ==="
-                        kubectl set image deployment/${env.APP_NAME} \
-                            ${env.APP_NAME}=${image} \
-                            -n ${env.K8S_NAMESPACE}
-
-                        echo "=== Waiting for rollout ==="
-                        kubectl rollout status deployment/${env.APP_NAME} \
-                            -n ${env.K8S_NAMESPACE} \
-                            --timeout=300s
-
-                        echo "=== Pods after rollout ==="
-                        kubectl get pods -n ${env.K8S_NAMESPACE}
-                    """
                 }
             }
         }
@@ -185,9 +131,9 @@ pipeline {
             steps{
                 script{
                     withCredentials([usernamePassword(
-                                credentialsId: 'github-credentials',
-                                usernameVariable: 'GIT_USER',
-                                passwordVariable: 'GIT_PASS'
+                        credentialsId: 'github-credentials',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_PASS'
                     )]) {
                         sh """
                             echo "=== Committing version update ==="
@@ -226,38 +172,38 @@ pipeline {
     post{
         success {
             mail(
-                subject: "CI/CD Deployment Success: ${env.APP_NAME} ${env.NEW_VERSION}",
+                subject: "App Deployment Success: ${env.APP_NAME} ${env.NEW_VERSION}",
                 mimeType: 'text/plain',
                 to: 'a572874046@163.com, raeezhao@gmail.com, a572874046@gmail.com',
                 body: """
                     ============================================================
-                    Deployment Complete!
+                    Application Deployment Complete!
                     ============================================================
                     Application: ${env.APP_NAME}
                     Version:     ${env.NEW_VERSION}
                     Image:       ${env.DOCKER_IMAGE}:${env.NEW_VERSION}
-                    Kubernetes:     ${env.K8S_NAMESPACE}
-
+                    Namespace:   ${env.K8S_NAMESPACE}
                     Public URL:  http://${env.APP_PUBLIC_IP}
-                    Use the URL above to test the Sudoku Game!
+                    ============================================================
+                    Test the Sudoku Game at the URL above!
                     ============================================================
                 """
             )
         }
         failure{
             mail(
-                subject: "CI/CD Deployment Failed: ${env.APP_NAME} - Build #${env.BUILD_NUMBER}",
+                subject: "App Deployment Failed: ${env.APP_NAME} - Build #${env.BUILD_NUMBER}",
                 mimeType: 'text/plain',
                 to: 'a572874046@163.com, a572874046@gmail.com',
                 body: """
-                ============================================================
-                Pipeline Failed!
-                ============================================================
-                Application:    ${env.APP_NAME}
-                Original Ver:   ${env.ORIGINAL_VERSION}
-                Build Number:   ${env.BUILD_NUMBER}
-                Build URL:      ${env.BUILD_URL}
-                ============================================================
+                    ============================================================
+                    Application Pipeline Failed!
+                    ============================================================
+                    Application:    ${env.APP_NAME}
+                    Original Ver:   ${env.ORIGINAL_VERSION}
+                    Build Number:   ${env.BUILD_NUMBER}
+                    Build URL:      ${env.BUILD_URL}
+                    ============================================================
                 """
             )
             script {
@@ -270,13 +216,7 @@ pipeline {
             }
         }
         always {
-            cleanWs(
-                patterns: [
-                    [pattern: '**/terraform.tfstate', type: 'EXCLUDE'],
-                    [pattern: '**/terraform.tfstate.backup', type: 'EXCLUDE'],
-                    [pattern: '**/.terraform/**', type: 'EXCLUDE']
-                ]
-            )
+            cleanWs()
         }
     }
 }
