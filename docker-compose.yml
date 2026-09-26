@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: sudoku-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sudoku
+      POSTGRES_PASSWORD: sudoku_password
+      POSTGRES_DB: sudoku_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - sudoku-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U sudoku -d sudoku_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: sudoku-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://sudoku:sudoku_password@postgres:5432/sudoku_db
+      FLASK_ENV: production
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sudoku-net
+
+volumes:
+  postgres-data:
+    driver: local
+
+networks:
+  sudoku-net:
+    driver: bridge
