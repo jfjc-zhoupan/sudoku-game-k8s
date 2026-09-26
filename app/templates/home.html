@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sudoku - Home</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .home-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+      gap: 30px;
+    }
+    .home-title {
+      font-size: 4rem;
+      margin-bottom: 20px;
+    }
+    .home-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 300px;
+    }
+    .home-button {
+      padding: 20px;
+      font-size: 1.3rem;
+      cursor: pointer;
+      background: #2c3e50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      text-decoration: none;
+      text-align: center;
+      transition: background 0.2s;
+    }
+    .home-button:hover {
+      background: #34495e;
+    }
+    .home-button.records {
+      background: #16a085;
+    }
+    .home-button.records:hover {
+      background: #1abc9c;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="home-container">
+      <h1 class="home-title">Sudoku</h1>
+      <div class="home-buttons">
+        <a href="{{ url_for('new_game_page') }}" class="home-button">
+          🎮 New Game
+        </a>
+        <a href="{{ url_for('records_page') }}" class="home-button records">
+          📊 Game Records
+        </a>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">
+    <p>{{ app_name }} v{{ version }}</p>
+  </footer>
+</body>
+</html>

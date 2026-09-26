@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sudoku - Game Records</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .records-table {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      border-collapse: collapse;
+      background: white;
+    }
+    .records-table th,
+    .records-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    .records-table th {
+      background: #2c3e50;
+      color: white;
+    }
+    .records-table tr:hover {
+      background: #f5f5f5;
+    }
+    .solved-yes { color: #16a085; font-weight: bold; }
+    .solved-no { color: #e74c3c; }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: #2c3e50;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <a href="{{ url_for('index') }}" style="text-decoration: none; color: inherit;">
+        <h1>Game Records</h1>
+      </a>
+    </header>
+
+    {% if games %}
+    <table class="records-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Difficulty</th>
+          <th>Started</th>
+          <th>Duration</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for game in games %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ game.difficulty }}</td>
+          <td>{{ game.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ game.format_duration() }}</td>
+          <td>
+            {% if game.solved %}
+              <span class="solved-yes">✅ Solved</span>
+            {% else %}
+              <span class="solved-no">❌ Incomplete</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; color: #888; margin-top: 50px;">
+      No games played yet. <a href="{{ url_for('new_game_page') }}">Start a new game!</a>
+    </p>
+    {% endif %}
+
+    <div style="text-align: center; margin-top: 30px;">
+      <a href="{{ url_for('index') }}" class="back-link">← Back to Home</a>
+    </div>
+  </main>
+  <footer class="footer">
+    <p>Sudoku v{{ version }}</p>
+  </footer>
+</body>
+</html>

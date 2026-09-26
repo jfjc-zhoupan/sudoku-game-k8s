@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sudoku - New Game</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <a href="{{ url_for('index') }}" style="text-decoration: none; color: inherit;">
+        <h1>Sudoku</h1>
+      </a>
+      <div class="controls">
+        <label>
+          Difficulty
+          <select id="difficulty">
+            {% for name in difficulties %}
+            <option value="{{ name }}" {% if name == "Easy" %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button id="new-game" type="button">New Game</button>
+        <button id="check" type="button">Check</button>
+        <button id="hint" type="button">Hint</button>
+        <button id="complete" type="button" style="background: #16a085; color: white;">Complete</button>
+      </div>
+    </header>
+
+    <div class="timer" id="timer">
+      ⏱️ Time: <span id="timer-display">00:00</span>
+    </div>
+
+    <div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+
+    <div class="pad" role="group" aria-label="Number pad">
+      {% for n in range(1, 10) %}
+      <button type="button" class="num" data-num="{{ n }}">{{ n }}</button>
+      {% endfor %}
+      <button type="button" id="erase">Erase</button>
+    </div>
+
+    <p class="status" id="status">Fill the grid so every row, column, and 3×3 box has 1–9.</p>
+  </main>
+  <footer class="footer">
+    <p>Sudoku v{{ version }} · <a href="{{ url_for('records_page') }}">View Records</a></p>
+  </footer>
+  <script src="{{ url_for('static', filename='game.js') }}"></script>
+</body>
+</html>

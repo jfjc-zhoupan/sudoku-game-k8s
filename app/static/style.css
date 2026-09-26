@@ -1,0 +1,153 @@
+:root {
+  --bg: #f4f1ea;
+  --ink: #1a252f;
+  --muted: #34495e;
+  --grid: #2c3e50;
+  --given-bg: #e8e4d9;
+  --empty-bg: #ffffff;
+  --selected: #d6eaf8;
+  --same: #fdebd0;
+  --error: #f5b7b1;
+  --entry: #1f618d;
+  --error-ink: #922b21;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+}
+
+select,
+button {
+  font: inherit;
+  padding: 8px 12px;
+  border: 1px solid #c5c0b5;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #f7f4ee;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 1px;
+  background: var(--grid);
+  padding: 3px;
+  border-radius: 4px;
+  width: min(100%, 520px);
+  margin: 0 auto;
+  aspect-ratio: 1;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--empty-bg);
+  font-size: clamp(1rem, 4vw, 1.4rem);
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cell.given {
+  background: var(--given-bg);
+  color: var(--ink);
+}
+
+.cell.entry {
+  color: var(--entry);
+}
+
+.cell.same {
+  background: var(--same);
+}
+
+.cell.selected {
+  background: var(--selected);
+}
+
+.cell.error {
+  background: var(--error);
+  color: var(--error-ink);
+}
+
+.cell.box-right {
+  border-right: 3px solid var(--grid);
+}
+
+.cell.box-bottom {
+  border-bottom: 3px solid var(--grid);
+}
+
+.pad {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.pad button {
+  min-width: 44px;
+  min-height: 44px;
+  font-weight: 700;
+}
+
+.status {
+  text-align: center;
+  color: var(--muted);
+  margin: 16px 0 0;
+}
+
+@media (max-width: 600px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
