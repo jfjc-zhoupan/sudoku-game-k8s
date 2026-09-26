@@ -49,6 +49,11 @@ pipeline {
                                 returnStdout: true,
                                 script: "cd ${env.TF_DIR} && terraform output -raw acr_login_server"
                             ).trim()
+
+                            env.ACR_USERNAME = sh(
+                                returnStdout: true,
+                                script: "az acr credential show --name ${env.ACR_NAME} --query username -o tsv"
+                            ).trim()
                         }
                     }
                 }
@@ -69,11 +74,18 @@ pipeline {
                     Branch:          ${env.BRANCH_NAME}
                     ACR Name:        ${env.ACR_NAME}
                     ACR Login Server:${env.ACR_LOGIN_SERVER}
+                    ACR Password:     [retrieve from Jenkins credential 'acr-credentials' or Azure Key Vault]
                     AKS Cluster:     ${env.AKS_CLUSTER_NAME}
                     Resource Group:  ${env.RESOURCE_GROUP}
                     Build:           #${env.BUILD_NUMBER}
                     ============================================================
-                    Next step: Run the 'application' pipeline to deploy the app.
+                    SECURITY NOTE:
+                    The ACR password is NOT included in this email.
+                    Retrieve it securely via:
+                      az acr credential show --name ${env.ACR_NAME} --query 'passwords[0].value' -o tsv
+                    ============================================================
+                    Next step: Ensure the Jenkins credential 'acr-credentials' exists,
+                    then run the 'application' pipeline.
                     ============================================================
                 """
             )
