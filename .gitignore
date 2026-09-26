@@ -104,3 +104,8 @@ dist/
 deployment-info.txt
 k8s-state.txt
 public-ips.txt
+# Local SQLite database
+app/instance/
+*.db
+*.sqlite
+*.sqlite3
