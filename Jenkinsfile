@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        TF_DIR = 'terraform-infra'
+        TF_DIR = 'terraform'
 
         RESOURCE_GROUP = 'rg-sudoku-game'
         ACR_NAME = 'acrsudokugame'
