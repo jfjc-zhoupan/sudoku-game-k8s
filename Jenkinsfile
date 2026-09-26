@@ -11,6 +11,10 @@ pipeline {
         TF_VAR_resource_group_name = 'rg-sudoku-game'
         TF_VAR_acr_name = 'acrsudokugame'
         TF_VAR_aks_cluster_name = 'aks-sudoku-game'
+        TF_VAR_kubernetes_version = '1.36'
+        TF_VAR_node_count = '1'
+        TF_VAR_node_vm_size = 'Standard_D2s_v3'
+        TF_VAR_dns_prefix = 'sudoku-game'
 
         ACR_LOGIN_SERVER = ''
     }
