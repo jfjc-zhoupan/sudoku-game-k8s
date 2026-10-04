@@ -37,19 +37,28 @@ pipeline {
             steps{
                 script{
                     def versionContent = readFile("${env.VERSION_FILE}")
+
+                    echo "=== version.py content ==="
+                    echo versionContent
+
                     def versionLine = versionContent.readLines().find { line ->
                         line.trim().startsWith('__version__')
                     }
                     if (versionLine == null) {
                         error "Could not find __version__ in ${env.VERSION_FILE}"
                     }
-                    def parts = versionLine.split('=')
-                    def version = parts[1].trim().replace('"', '').replace("'", '')
-                    env.ORIGINAL_VERSION = String.valueOf(version)
+                    echo "Found line: ${versionLine}"
 
-                    def versionParts = env.ORIGINAL_VERSION.split('\\.')
+                    def parts = versionLine.split('=')
+                    def originalVersion = parts[1].trim().replace('"', '').replace("'", '')
+                    env.ORIGINAL_VERSION = originalVersion
+                    echo "Original version: ${originalVersion}"
+
+                    def versionParts = originalVersion.split('\\.')
                     def newPatch = (versionParts[2] as Integer) + 1
-                    env.NEW_VERSION = "${versionParts[0]}.${versionParts[1]}.${newPatch}"
+                    def newVersion = "${versionParts[0]}.${versionParts[1]}.${newPatch}"
+                    env.NEW_VERSION = newVersion
+                    echo "New version: ${newVersion}"
 
                     sh """
                         sed -i 's/__version__ = .*/__version__ = "${newVersion}"/' ${env.VERSION_FILE}
@@ -136,10 +145,10 @@ pipeline {
                             echo "=== Committing version update ==="
                             git config --global user.email "jenkins@example.com"
                             git config --global user.name "jenkins CI"
-                            git remote set-url origin https://${GIT_USER}:${GIT_PASS}@github.com/jfjc-zhoupan/sudoku-game.git
+                            git remote set-url origin https://${GIT_USER}:${GIT_PASS}@github.com/jfjc-zhoupan/sudoku-game-k8s.git
 
                             git add ${env.VERSION_FILE}
-                            git commit -m "ci/cd: version bump to ${env.NEW_VERSION}" || echo "No changes to commit"
+                            git commit -m "ci/cd: version bump to ${env.NEW_VERSION} [skip ci]" || echo "No changes to commit"
                             git push origin HEAD:${env.BRANCH_NAME}
                             echo "Version update committed successfully to ${env.BRANCH_NAME}!"
                         """
@@ -169,6 +178,7 @@ pipeline {
                     ============================================================
                 """
             )
+            deleteDir()
         }
         failure{
             mail(
@@ -194,9 +204,6 @@ pipeline {
                     echo "Rollback skipped: ${e.message}"
                 }
             }
-        }
-        always {
-            deleteDir()
         }
     }
 }
