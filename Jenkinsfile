@@ -1,5 +1,6 @@
 pipeline {
     agent any
+
     environment {
         APP_NAME = 'sudoku-game'
         APP_DIR = 'app'
@@ -21,7 +22,7 @@ pipeline {
     stages {
         stage("Checkout"){
             steps{
-                cleanWs()
+                deleteDir()
                 checkout scm
                 script {
                     echo "Branch: ${env.BRANCH_NAME}"
@@ -97,13 +98,9 @@ pipeline {
                                     --overwrite-existing
 
                                 kubectl get nodes
-                            """
 
-                            sh """
-                                kubectl apply -f k8s/aks/
-                            """
+                                kubectl apply -f ${env.K8S_MANIFESTS_DIR}/
 
-                            sh """
                                 echo "=== Updating deployment to ${env.DOCKER_IMAGE}:${env.NEW_VERSION} ==="
                                 kubectl set image deployment/${env.APP_NAME} \
                                     ${env.APP_NAME}=${env.DOCKER_IMAGE}:${env.NEW_VERSION} \
@@ -147,23 +144,6 @@ pipeline {
                             echo "Version update committed successfully to ${env.BRANCH_NAME}!"
                         """
                     }
-                }
-            }
-        }
-        stage('Get Public IP'){
-            steps{
-                script{
-                    def publicIp = sh(
-                        returnStdout: true,
-                        script: """kubectl get ingress -n ${env.K8S_NAMESPACE} -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}'"""
-                    ).trim()
-
-                    if (!publicIp) {
-                        error "Could not retrieve public IP from Ingress"
-                    }
-
-                    env.APP_PUBLIC_IP = publicIp
-                    echo "App Public IP: ${env.APP_PUBLIC_IP}"
                 }
             }
         }
@@ -216,7 +196,7 @@ pipeline {
             }
         }
         always {
-            cleanWs()
+            deleteDir()
         }
     }
 }
