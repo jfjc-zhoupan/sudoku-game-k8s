@@ -121,7 +121,7 @@ pipeline {
                     # Login using the PEM certificate
                     az login --service-principal \
                         -u ${env.AZURE_APP_ID} \
-                        -p /tmp/azure-sp.pem \
+                        --certificate /tmp/azure-sp.pem \
                         --tenant ${env.AZURE_TENANT_ID}
 
                     az account set -s ${env.AZURE_SUBSCRIPTION_ID}
