@@ -14,6 +14,10 @@ pipeline {
         K8S_NAMESPACE = 'sudoku-game'
         K8S_MANIFESTS_DIR = 'k8s/aks'
 
+        AZURE_SUBSCRIPTION_ID = '4b4511ba-165a-4df2-be28-75937cfe1031'
+        AZURE_TENANT_ID       = '964f9745-bd07-4d1d-9a24-40f9bc141cc4'
+        AZURE_APP_ID          = 'fcb81694-c5c2-4d1d-b349-665f8fb040d0'
+
         ORIGINAL_VERSION = ''
         NEW_VERSION = ''
         APP_PUBLIC_IP = ''
@@ -86,6 +90,64 @@ pipeline {
                             docker push ${env.DOCKER_IMAGE}:${currentVersion}
                             docker push ${env.DOCKER_IMAGE}:latest
                         """
+                    }
+                }
+            }
+        }
+        stage('Ensure App Routing') {
+            steps {
+                script {
+                    withCredentials([
+                            file(credentialsId: 'azure-terraform-pfx', variable: 'AZURE_PFX_FILE'),
+                            string(credentialsId: 'azure-pfx-password', variable: 'AZURE_PFX_PASSWORD')
+                        ]) {
+                        sh """
+                    set -e
+
+                    # Copy pfx to a stable path (Jenkins temp dir may vanish between steps)
+                    cp "\$AZURE_PFX_FILE" /tmp/azure-sp.pfx
+                    chmod 600 /tmp/azure-sp.pfx
+
+                    # Convert pfx to PEM (works with or without password)
+                    if [ -n "\$AZURE_PFX_PASSWORD" ]; then
+                        openssl pkcs12 -in /tmp/azure-sp.pfx -out /tmp/azure-sp.pem -nodes \
+                            -passin pass:"\$AZURE_PFX_PASSWORD" 2>/dev/null || \
+                        openssl pkcs12 -in /tmp/azure-sp.pfx -out /tmp/azure-sp.pem -nodes \
+                            -passin pass:""
+                    else
+                        openssl pkcs12 -in /tmp/azure-sp.pfx -out /tmp/azure-sp.pem -nodes -passin pass:""
+                    fi
+
+                    # Login using the PEM certificate
+                    az login --service-principal \
+                        -u ${env.AZURE_APP_ID} \
+                        -p /tmp/azure-sp.pem \
+                        --tenant ${env.AZURE_TENANT_ID}
+
+                    az account set -s ${env.AZURE_SUBSCRIPTION_ID}
+
+                    # Check if App Routing is already enabled
+                    ENABLED=\$(az aks show \
+                        --resource-group ${env.AKS_RESOURCE_GROUP} \
+                        --name ${env.AKS_CLUSTER_NAME} \
+                        --query "addonProfiles.ingressApplicationRouting.enabled" \
+                        -o tsv 2>/dev/null || echo "false")
+
+                    if [ "\$ENABLED" = "true" ]; then
+                        echo ">>> App Routing add-on already enabled."
+                    else
+                        echo ">>> Enabling App Routing add-on..."
+                        az aks approuting enable \
+                            --resource-group ${env.AKS_RESOURCE_GROUP} \
+                            --name ${env.AKS_CLUSTER_NAME} \
+                            --yes
+                        echo ">>> App Routing enabled. Waiting for controller to provision LB..."
+                        sleep 90
+                    fi
+
+                    # Clean up secrets
+                    rm -f /tmp/azure-sp.pfx /tmp/azure-sp.pem
+                """
                     }
                 }
             }
