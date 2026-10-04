@@ -165,30 +165,46 @@ pipeline {
         success {
             script {
                 def versionContent = readFile("${env.VERSION_FILE}")
-                def versionLine = versionContent.readLines().find { line ->
-                    line.trim().startsWith('__version__')
-                }
+                def versionLine = versionContent.readLines().find { it.trim().startsWith('__version__') }
                 def currentVersion = versionLine.split('=')[1].trim().replace('"', '').replace("'", '')
-                env.NEW_VERSION = currentVersion
+
+                // Re-fetch the ingress IP here, in case APP_PUBLIC_IP was lost due to the CPS bug
+                def publicIp = env.APP_PUBLIC_IP
+                if (!publicIp) {
+                    withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                        publicIp = sh(
+                            returnStdout: true,
+                            script: """
+                            export KUBECONFIG=${KUBECONFIG_FILE}
+                            kubectl get ingress -n ${env.K8S_NAMESPACE} \
+                                -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}'
+                        """
+                        ).trim()
+                    }
+                }
+
+                // Build the body with Groovy string interpolation (double quotes)
+                def body = """
+                ============================================================
+                Application Deployment Complete!
+                ============================================================
+                Application: ${env.APP_NAME}
+                Version:     ${currentVersion}
+                Image:       ${env.DOCKER_IMAGE}:${currentVersion}
+                Namespace:   ${env.K8S_NAMESPACE}
+                Public URL:  http://${publicIp}
+                ============================================================
+                Test the Sudoku Game at the URL above!
+                ============================================================
+            """
+
+                mail(
+                    subject: "App Deployment Success: ${env.APP_NAME} ${currentVersion}",
+                    mimeType: 'text/plain',
+                    to: 'a572874046@163.com, raeezhao@gmail.com, a572874046@gmail.com',
+                    body: body
+                )
             }
-            mail(
-                subject: "App Deployment Success: ${env.APP_NAME} ${env.NEW_VERSION}",
-                mimeType: 'text/plain',
-                to: 'a572874046@163.com, raeezhao@gmail.com, a572874046@gmail.com',
-                body: """
-                    ============================================================
-                    Application Deployment Complete!
-                    ============================================================
-                    Application: ${env.APP_NAME}
-                    Version:     ${env.NEW_VERSION}
-                    Image:       ${env.DOCKER_IMAGE}:${env.NEW_VERSION}
-                    Namespace:   ${env.K8S_NAMESPACE}
-                    Public URL:  http://${env.APP_PUBLIC_IP}
-                    ============================================================
-                    Test the Sudoku Game at the URL above!
-                    ============================================================
-                """
-            )
             deleteDir()
         }
         failure{
