@@ -37,27 +37,22 @@ pipeline {
             steps{
                 script{
                     def versionContent = readFile("${env.VERSION_FILE}")
-
-                    echo "=== version.py content ==="
-                    echo versionContent
-
                     def versionLine = versionContent.readLines().find { line ->
                         line.trim().startsWith('__version__')
                     }
                     if (versionLine == null) {
                         error "Could not find __version__ in ${env.VERSION_FILE}"
                     }
-                    echo "Found line: ${versionLine}"
-
                     def parts = versionLine.split('=')
                     def originalVersion = parts[1].trim().replace('"', '').replace("'", '')
-                    env.ORIGINAL_VERSION = originalVersion
-                    echo "Original version: ${originalVersion}"
-
                     def versionParts = originalVersion.split('\\.')
                     def newPatch = (versionParts[2] as Integer) + 1
                     def newVersion = "${versionParts[0]}.${versionParts[1]}.${newPatch}"
+
+                    env.ORIGINAL_VERSION = originalVersion
                     env.NEW_VERSION = newVersion
+
+                    echo "Original version: ${originalVersion}"
                     echo "New version: ${newVersion}"
 
                     sh """
@@ -70,6 +65,13 @@ pipeline {
         stage("Build and Push Image"){
             steps{
                 script{
+                    def versionContent = readFile("${env.VERSION_FILE}")
+                    def versionLine = versionContent.readLines().find { line ->
+                        line.trim().startsWith('__version__')
+                    }
+                    def currentVersion = versionLine.split('=')[1].trim().replace('"', '').replace("'", '')
+                    echo "Using version: ${currentVersion}"
+
                     withCredentials([usernamePassword(
                                 credentialsId: 'acr-credentials',
                                 usernameVariable: 'ACR_USER',
@@ -78,10 +80,10 @@ pipeline {
                         sh """
                             echo "${ACR_PASS}" | docker login ${env.ACR_SERVER} -u "${ACR_USER}" --password-stdin
                             cd ${env.APP_DIR}
-                            docker build -t ${env.DOCKER_IMAGE}:${env.NEW_VERSION} .
-                            docker tag ${env.DOCKER_IMAGE}:${env.NEW_VERSION} ${env.DOCKER_IMAGE}:latest
+                            docker build -t ${env.DOCKER_IMAGE}:${currentVersion} .
+                            docker tag ${env.DOCKER_IMAGE}:${currentVersion} ${env.DOCKER_IMAGE}:latest
 
-                            docker push ${env.DOCKER_IMAGE}:${env.NEW_VERSION}
+                            docker push ${env.DOCKER_IMAGE}:${currentVersion}
                             docker push ${env.DOCKER_IMAGE}:latest
                         """
                     }
@@ -91,28 +93,25 @@ pipeline {
         stage('Deploy to AKS'){
             steps{
                 script{
-                    withCredentials([
-                        file(credentialsId: 'azure-terraform-pfx', variable: 'ARM_CLIENT_CERTIFICATE_PATH'),
-                        string(credentialsId: 'azure-pfx-password', variable: 'ARM_CLIENT_CERTIFICATE_PASSWORD')
-                    ]) {
-                        withEnv([
-                            "ARM_CLIENT_ID=fcb81694-c5c2-4d1d-b349-665f8fb040d0",
-                            "ARM_TENANT_ID=964f9745-bd07-4d1d-9a24-40f9bc141cc4",
-                            "ARM_SUBSCRIPTION_ID=4b4511ba-165a-4df2-be28-75937cfe1031"
-                        ]) {
-                            sh """
-                                az aks get-credentials \
-                                    --resource-group ${env.AKS_RESOURCE_GROUP} \
-                                    --name ${env.AKS_CLUSTER_NAME} \
-                                    --overwrite-existing
+                    def versionContent = readFile("${env.VERSION_FILE}")
+                    def versionLine = versionContent.readLines().find { line ->
+                        line.trim().startsWith('__version__')
+                    }
+                    def currentVersion = versionLine.split('=')[1].trim().replace('"', '').replace("'", '')
+                    echo "Deploying version: ${currentVersion}"
 
+                    withCredentials([
+                            file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG_FILE')
+                    ]) {
+                            sh """
+                                export KUBECONFIG=${KUBECONFIG_FILE}
                                 kubectl get nodes
 
                                 kubectl apply -f ${env.K8S_MANIFESTS_DIR}/
 
-                                echo "=== Updating deployment to ${env.DOCKER_IMAGE}:${env.NEW_VERSION} ==="
+                                echo "=== Updating deployment to ${env.DOCKER_IMAGE}:${currentVersion} ==="
                                 kubectl set image deployment/${env.APP_NAME} \
-                                    ${env.APP_NAME}=${env.DOCKER_IMAGE}:${env.NEW_VERSION} \
+                                    ${env.APP_NAME}=${env.DOCKER_IMAGE}:${currentVersion} \
                                     -n ${env.K8S_NAMESPACE}
 
                                 echo "=== Waiting for rollout ==="
@@ -128,7 +127,6 @@ pipeline {
                                 script: "kubectl get ingress -n ${env.K8S_NAMESPACE} -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}'"
                             ).trim()
                             echo "App Public IP: ${env.APP_PUBLIC_IP}"
-                        }
                     }
                 }
             }
@@ -136,6 +134,13 @@ pipeline {
         stage('Commit Version Update'){
             steps{
                 script{
+                    def versionContent = readFile("${env.VERSION_FILE}")
+                    def versionLine = versionContent.readLines().find { line ->
+                        line.trim().startsWith('__version__')
+                    }
+                    def currentVersion = versionLine.split('=')[1].trim().replace('"', '').replace("'", '')
+                    echo "Committing version: ${currentVersion}"
+
                     withCredentials([usernamePassword(
                         credentialsId: 'github-credentials',
                         usernameVariable: 'GIT_USER',
@@ -148,7 +153,7 @@ pipeline {
                             git remote set-url origin https://${GIT_USER}:${GIT_PASS}@github.com/jfjc-zhoupan/sudoku-game-k8s.git
 
                             git add ${env.VERSION_FILE}
-                            git commit -m "ci/cd: version bump to ${env.NEW_VERSION} [skip ci]" || echo "No changes to commit"
+                            git commit -m "ci/cd: version bump to ${currentVersion} [skip ci]" || echo "No changes to commit"
                             git push origin HEAD:${env.BRANCH_NAME}
                             echo "Version update committed successfully to ${env.BRANCH_NAME}!"
                         """
@@ -160,6 +165,14 @@ pipeline {
 
     post{
         success {
+            script {
+                def versionContent = readFile("${env.VERSION_FILE}")
+                def versionLine = versionContent.readLines().find { line ->
+                    line.trim().startsWith('__version__')
+                }
+                def currentVersion = versionLine.split('=')[1].trim().replace('"', '').replace("'", '')
+                env.NEW_VERSION = currentVersion
+            }
             mail(
                 subject: "App Deployment Success: ${env.APP_NAME} ${env.NEW_VERSION}",
                 mimeType: 'text/plain',
@@ -196,14 +209,6 @@ pipeline {
                     ============================================================
                 """
             )
-            script {
-                try {
-                    sh "git checkout ${env.VERSION_FILE} 2>/dev/null || echo 'Rollback skipped'"
-                }
-                catch (Exception e) {
-                    echo "Rollback skipped: ${e.message}"
-                }
-            }
         }
     }
 }
