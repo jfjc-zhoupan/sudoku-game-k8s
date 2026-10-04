@@ -140,7 +140,6 @@ pipeline {
                         az aks approuting enable \
                             --resource-group ${env.AKS_RESOURCE_GROUP} \
                             --name ${env.AKS_CLUSTER_NAME} \
-                            --yes
                         echo ">>> App Routing enabled. Waiting for controller to provision LB..."
                         sleep 90
                     fi
