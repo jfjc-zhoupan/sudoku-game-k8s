@@ -106,25 +106,23 @@ pipeline {
                             sh """
                                 export KUBECONFIG=${KUBECONFIG_FILE}
                                 kubectl get nodes
-
                                 kubectl apply -f ${env.K8S_MANIFESTS_DIR}/
-
-                                echo "=== Updating deployment to ${env.DOCKER_IMAGE}:${currentVersion} ==="
                                 kubectl set image deployment/${env.APP_NAME} \
                                     ${env.APP_NAME}=${env.DOCKER_IMAGE}:${currentVersion} \
                                     -n ${env.K8S_NAMESPACE}
-
-                                echo "=== Waiting for rollout ==="
                                 kubectl rollout status deployment/${env.APP_NAME} \
                                     -n ${env.K8S_NAMESPACE} \
                                     --timeout=300s
-
                                 kubectl get pods -n ${env.K8S_NAMESPACE}
                             """
 
                             env.APP_PUBLIC_IP = sh(
                                 returnStdout: true,
-                                script: "kubectl get ingress -n ${env.K8S_NAMESPACE} -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}'"
+                                script: """
+                                            export KUBECONFIG=${KUBECONFIG_FILE}
+                                            kubectl get ingress -n ${env.K8S_NAMESPACE} \
+                                                -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}'
+                                        """
                             ).trim()
                             echo "App Public IP: ${env.APP_PUBLIC_IP}"
                     }
